@@ -1,55 +1,65 @@
-# LinkedIn Post Draft
+import pandas as pd
+from pathlib import Path
 
----
+# Resolve data path relative to this script so it works from any working dir
+DATA_PATH = Path(__file__).resolve().parent / "pl_tournament_dataset.csv"
 
-## Main version (personal / authentic)
+# Season-level dataset. eng_season_coeff = England UEFA season country coefficient
+# (sum of English clubs' UCL+UEL+UECL points / number of English clubs).
+# Firm-sourced (kassiesa.net / football-coefficient.eu): 2020/21-2025/26. Pre-2020/21 = approx.
+#
+# tournament_scope  = the primary summer-tournament treatment type for that season:
+#   league_wide    -> Euro / World Cup (nearly every PL club sends players)
+#   regional_copa  -> Copa America ONLY (no Euro/WC that summer): intermediate scope, ~25-35 PL players
+#   club_narrow    -> FIFA Club World Cup 2025 (only 2 PL clubs)
+#   winter_control -> 2022 World Cup, mid-season interruption (different mechanism)
+#   none           -> no major summer tournament
+# copa_america_flag = 1 if a Copa America edition occurred that summer (independent layer)
 
-I'll be honest about where this project came from: anxiety.
+finals = {"2015/16":0,"2016/17":0,"2017/18":1,"2018/19":4,"2019/20":0,
+          "2020/21":2,"2021/22":1,"2022/23":1,"2023/24":0,"2024/25":2,"2025/26":2}
 
-It's the middle of the 2026 World Cup as I write this, and I've spent it watching Declan Rice and Bukayo Saka — two of the players Arsenal's whole season runs through — barely make it to the final whistle for England. Heavy legs, running on empty. And all I could think about was August: our title defense starting with our best players already emptied out before a ball is kicked.
+rows = [
+    # season, preceding_tournament, scope, copa_flag, coeff, source
+    ("2015/16","Copa America 2015","regional_copa",1,14.250,"approx"),
+    ("2016/17","Euro 2016 + Copa Centenario","league_wide",1,14.928,"approx"),
+    ("2017/18","None","none",0,20.071,"approx"),
+    ("2018/19","World Cup 2018","league_wide",0,22.642,"approx"),
+    ("2019/20","Copa America 2019","regional_copa",1,18.571,"approx"),
+    ("2020/21","None (Euro & Copa postponed)","none",0,24.357,"firm"),
+    ("2021/22","Euro 2020(21) + Copa 2021","league_wide",1,21.000,"firm"),
+    ("2022/23","Winter WC 2022","winter_control",0,23.000,"firm"),
+    ("2023/24","None","none",0,17.375,"firm"),
+    ("2024/25","Euro 2024 + Copa 2024","league_wide",1,29.464,"firm"),
+    ("2025/26","Club World Cup 2025","club_narrow",0,28.681,"firm"),
+]
+df = pd.DataFrame(rows, columns=["season","preceding_tournament","tournament_scope","copa_america_flag","eng_season_coeff","coeff_source"])
+df["eng_ucl_uel_finalists"] = df["season"].map(finals)
+df["league_treatment_flag"] = (df["tournament_scope"]=="league_wide").astype(int)
 
-That worry doesn't come from nowhere. For the better part of a year I was away from work, and I used the time to follow Arsenal and the Premier League closer than I ever had. Close enough to absorb the narrative that's everywhere right now — the players are being broken down. Too many tournaments, too many minutes, no rest. And that part is true. The strain on their bodies is real.
+print("=== SEASON-LEVEL DATASET ===")
+print(df[["season","tournament_scope","copa_america_flag","eng_season_coeff","eng_ucl_uel_finalists","coeff_source"]].to_string(index=False))
 
-But sitting in that anxiety, I realised I was making a leap I hadn't actually checked: that tired players in July means a worse Arsenal, and worse Premier League clubs, come the season. Everyone assumes it. I was assuming it. So I pulled eleven seasons of data — UEFA coefficients, injury indices, tournament calendars — fully expecting it to confirm my fear.
+def m(scope): 
+    s=df[df.tournament_scope==scope]; return s.eng_season_coeff.mean(), len(s), list(s.season)
 
-It didn't. And I sat there a little stunned.
+print("\n=== EUROPEAN PERFORMANCE by scope ===")
+for sc in ["league_wide","regional_copa","none","club_narrow","winter_control"]:
+    mean,k,seas=m(sc); print(f"{sc:14s} n={k}  mean coeff={mean:6.3f}  {seas}")
 
-→ There's no league-wide injury spike after summer tournaments. Premier League injuries actually fell after the 2024 summer, which crammed the Euros AND Copa América into the same window. The strain concentrates in specific players; it doesn't wash across the league.
+lw = df[df.tournament_scope=="league_wide"].eng_season_coeff.mean()
+clean = df[df.tournament_scope=="none"].eng_season_coeff.mean()
+copa = df[df.tournament_scope=="regional_copa"].eng_season_coeff.mean()
+allnorm = df[df.tournament_scope.isin(["none","regional_copa"])].eng_season_coeff.mean()
 
-→ English clubs don't get worse in Europe afterwards — they hold or improve. England's best UEFA coefficient season on record came straight after that brutal double-tournament summer of 2024.
+print("\n=== KEY CONTRASTS ===")
+print(f"League-wide ({lw:.3f}) vs ALL non-tournament incl. Copa ({allnorm:.3f}): {lw-allnorm:+.3f}  [original framing]")
+print(f"League-wide ({lw:.3f}) vs CLEAN controls only ({clean:.3f}): {lw-clean:+.3f}  [Copa removed from controls]")
+print(f"Regional-Copa-only ({copa:.3f}) vs clean controls ({clean:.3f}): {copa-clean:+.3f}")
 
-→ The only place the "broken down" story clearly lands is when a tournament hits one or two clubs alone. Chelsea won the Club World Cup, got no pre-season, and fell from 4th and the Champions League to 8th and out of Europe. Concentrated dose, real damage.
+print("\nNote: 2024/25 (England's record 29.464) was a DOUBLE tournament summer (Euro + Copa),")
+print("yet posted the best coefficient on record -> counter to a fatigue-decline hypothesis.")
 
-Here's the part that actually settled my nerves: the clubs sending the most players to tournaments are also the deepest, best-run squads — the ones built to absorb exactly this. Arsenal included. A World Cup that stretches Rice and Saka is a squad-wide event spread thin across the whole league, and it lands on the teams best equipped to carry it. It's the narrow, one-club tournaments that do the damage — and this summer isn't one of those.
-
-The fatigue I'm watching on my screen is real. It just doesn't scale the way my gut insisted it would. I went looking for a reason to worry about our title defense and the data talked me down.
-
-I built the whole thing out into a portfolio project — data, code, and the parts where I was wrong. Free and public sources only. Link in the comments.
-
-Sometimes you do the analysis to inform a decision. Sometimes you do it to stop doomscrolling about your football club. This was the second one.
-
-#FootballAnalytics #DataAnalysis #PremierLeague #Arsenal #DataScience
-
----
-
-## Shorter version (if you want something punchier)
-
-This project started as pure anxiety.
-
-It's the 2026 World Cup, and I've watched Declan Rice and Bukayo Saka — the players Arsenal's season runs through — barely finish games for England. All I could think about was our title defense starting with both of them already spent.
-
-The narrative online agrees: players are being broken down. And it's true — the strain is real. But I caught myself assuming the next step without checking it: that tired players means worse clubs come the season. So I pulled eleven seasons of data, expecting to confirm my fear.
-
-I couldn't.
-
-No league-wide injury spike (PL injuries even fell after the 2024 Euro + Copa double summer). No European decline — England's best UEFA coefficient on record came right after it. The only real collapse was one club: Chelsea, after the Club World Cup with no pre-season, 4th to 8th and out of Europe.
-
-The fatigue is real for a player in a moment. It doesn't scale to a squad as deep as ours, or a league full of deep squads. I went looking for a reason to worry about Arsenal, and the data talked me down.
-
-Full project (data + code + the parts I got wrong) in the comments.
-
-#FootballAnalytics #DataScience #PremierLeague #Arsenal
-
----
-
-*Note: keep the project link as the first comment rather than in the post body — LinkedIn tends to suppress reach on posts with outbound links in the main text.*
+DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+df.to_csv(DATA_PATH, index=False)
+print(f"\nSaved {DATA_PATH}")
