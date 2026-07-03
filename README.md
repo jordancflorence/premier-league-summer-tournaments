@@ -1,65 +1,63 @@
-import pandas as pd
-from pathlib import Path
+# Do Summer Tournaments Break the Premier League?
 
-# Resolve data path relative to this script so it works from any working dir
-DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "pl_tournament_dataset.csv"
+**Testing whether Premier League injury rates spike — and whether English clubs get worse in Europe — after major summer football tournaments (Euros, World Cup, Club World Cup).**
 
-# Season-level dataset. eng_season_coeff = England UEFA season country coefficient
-# (sum of English clubs' UCL+UEL+UECL points / number of English clubs).
-# Firm-sourced (kassiesa.net / football-coefficient.eu): 2020/21-2025/26. Pre-2020/21 = approx.
-#
-# tournament_scope  = the primary summer-tournament treatment type for that season:
-#   league_wide    -> Euro / World Cup (nearly every PL club sends players)
-#   regional_copa  -> Copa America ONLY (no Euro/WC that summer): intermediate scope, ~25-35 PL players
-#   club_narrow    -> FIFA Club World Cup 2025 (only 2 PL clubs)
-#   winter_control -> 2022 World Cup, mid-season interruption (different mechanism)
-#   none           -> no major summer tournament
-# copa_america_flag = 1 if a Copa America edition occurred that summer (independent layer)
+A self-contained data analytics portfolio project built entirely on free, publicly available sources.
 
-finals = {"2015/16":0,"2016/17":0,"2017/18":1,"2018/19":4,"2019/20":0,
-          "2020/21":2,"2021/22":1,"2022/23":1,"2023/24":0,"2024/25":2,"2025/26":2}
+---
 
-rows = [
-    # season, preceding_tournament, scope, copa_flag, coeff, source
-    ("2015/16","Copa America 2015","regional_copa",1,14.250,"approx"),
-    ("2016/17","Euro 2016 + Copa Centenario","league_wide",1,14.928,"approx"),
-    ("2017/18","None","none",0,20.071,"approx"),
-    ("2018/19","World Cup 2018","league_wide",0,22.642,"approx"),
-    ("2019/20","Copa America 2019","regional_copa",1,18.571,"approx"),
-    ("2020/21","None (Euro & Copa postponed)","none",0,24.357,"firm"),
-    ("2021/22","Euro 2020(21) + Copa 2021","league_wide",1,21.000,"firm"),
-    ("2022/23","Winter WC 2022","winter_control",0,23.000,"firm"),
-    ("2023/24","None","none",0,17.375,"firm"),
-    ("2024/25","Euro 2024 + Copa 2024","league_wide",1,29.464,"firm"),
-    ("2025/26","Club World Cup 2025","club_narrow",0,28.681,"firm"),
-]
-df = pd.DataFrame(rows, columns=["season","preceding_tournament","tournament_scope","copa_america_flag","eng_season_coeff","coeff_source"])
-df["eng_ucl_uel_finalists"] = df["season"].map(finals)
-df["league_treatment_flag"] = (df["tournament_scope"]=="league_wide").astype(int)
+## TL;DR
 
-print("=== SEASON-LEVEL DATASET ===")
-print(df[["season","tournament_scope","copa_america_flag","eng_season_coeff","eng_ucl_uel_finalists","coeff_source"]].to_string(index=False))
+Tested against public data, with summer tournaments split by **scope** — how much of the league they touch: `league_wide` (Euro/World Cup), `regional` (Copa América only), `club_narrow` (Club World Cup), `none` (clean control):
 
-def m(scope): 
-    s=df[df.tournament_scope==scope]; return s.eng_season_coeff.mean(), len(s), list(s.season)
+| Claim | Verdict | Evidence |
+|---|---|---|
+| Summer tournaments cause a **league-wide injury spike** | ❌ Not at league level; ✅ real at player/club level | PL injury counts *fell* even after the 2024 *double* summer (Euro + Copa) and after the 2025 Club World Cup, but Chelsea (CWC winners) saw +44% and Man City the most post-tournament injuries of any European club |
+| PL clubs **perform worse in Europe** after tournament summers | ❌ Rejected — no decline (though only a modest rise) | vs *genuinely clean* controls, England's UEFA coefficient averages **22.01** after league-wide tournaments vs **20.60** (a modest **+1.4**, not the +3.1 you get if you leave Copa seasons in the control group); the record coefficient (29.46) came after the Euro + Copa double summer of 2024 |
+| A **narrow** tournament (Club World Cup) can degrade an individual club | ✅ Supported (club-level, domestic) | Chelsea fell from **4th + Champions League** (2024/25) to **8th + no Europe** (2025/26) after winning the CWC with no pre-season; Man City (shallower run) strained but did not collapse |
 
-print("\n=== EUROPEAN PERFORMANCE by scope ===")
-for sc in ["league_wide","regional_copa","none","club_narrow","winter_control"]:
-    mean,k,seas=m(sc); print(f"{sc:14s} n={k}  mean coeff={mean:6.3f}  {seas}")
+**Why scope matters — two ways:** (1) The Club World Cup touched only Chelsea and Man City, so pooling it into a league-level comparison is a category error (Arsenal and Aston Villa drove England's 2025/26 coefficient and weren't even in it) — analysed alone, it shows genuine club-level degradation. (2) Copa América ran in summer 2015 and 2019, so two seasons that looked like clean "controls" were actually mildly treated; removing them shrinks the apparent league-wide performance advantage from +3.1 to +1.4. Getting scope right strengthens one finding and honestly weakens another.
 
-lw = df[df.tournament_scope=="league_wide"].eng_season_coeff.mean()
-clean = df[df.tournament_scope=="none"].eng_season_coeff.mean()
-copa = df[df.tournament_scope=="regional_copa"].eng_season_coeff.mean()
-allnorm = df[df.tournament_scope.isin(["none","regional_copa"])].eng_season_coeff.mean()
+**The mechanism:** tournament fatigue is a *dose-dependent, player/club-level* risk. Spread across a league-wide tournament it is absorbed by squad depth; concentrated on one or two clubs by a narrow tournament, it becomes visible.
 
-print("\n=== KEY CONTRASTS ===")
-print(f"League-wide ({lw:.3f}) vs ALL non-tournament incl. Copa ({allnorm:.3f}): {lw-allnorm:+.3f}  [original framing]")
-print(f"League-wide ({lw:.3f}) vs CLEAN controls only ({clean:.3f}): {lw-clean:+.3f}  [Copa removed from controls]")
-print(f"Regional-Copa-only ({copa:.3f}) vs clean controls ({clean:.3f}): {copa-clean:+.3f}")
+The only clean *league-wide* injury shock came from the **2022 *winter* World Cup**, which interrupted the season mid-campaign — a different mechanism that doesn't generalise to summer tournaments.
 
-print("\nNote: 2024/25 (England's record 29.464) was a DOUBLE tournament summer (Euro + Copa),")
-print("yet posted the best coefficient on record -> counter to a fatigue-decline hypothesis.")
+---
 
-DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-df.to_csv(DATA_PATH, index=False)
-print(f"\nSaved {DATA_PATH}")
+## Repository structure
+
+| File | Description |
+|---|---|
+| `README.md` | This file — project overview & findings |
+| `analysis.md` | Full write-up (exec summary → limitations) |
+| `analysis.py` | Reproducible pandas analysis script |
+| `pl_tournament_dataset.csv` | Season-level dataset, 2015/16–2025/26 |
+| `data-schema.md` | Column dictionary & recommended schema |
+| `linkedin-post.md` | Project summary written for a general audience |
+| `requirements.txt` | Python dependencies (pandas) |
+| `LICENSE` | MIT |
+
+---
+
+## Method in one paragraph
+
+Seasons 2015/16–2025/26 are labelled by the *scope* of the summer tournament that preceded them — `league_wide` (Euro/World Cup), `regional_copa` (Copa América only), `club_narrow` (Club World Cup), `winter_control` (the 2022 World Cup), or `none`. European performance is measured with England's UEFA season coefficient (points across UCL/UEL/UECL per club) and English UCL/UEL finalist counts, sourced from kassiesa.net and football-coefficient.eu. Injury signals come from the Howden Men's European Football Injury Index and peer-reviewed UEFA Elite Club Injury Study work. The winter 2022 World Cup and the club-narrow Club World Cup are held out from the league-level comparison as separate cases. Because physical tracking data (GPS/optical load) is proprietary, workload is proxied by tournament-participation dose, recovery-window length, and fixture congestion — with the limitation stated explicitly.
+
+## Reproduce
+
+```bash
+pip install -r requirements.txt
+python analysis.py
+```
+
+Prints the scope-by-scope comparison and regenerates `pl_tournament_dataset.csv`.
+
+---
+
+## Key limitations (read before citing)
+
+- No public exposure-adjusted (per-1,000-hour) PL injury rate exists; injury counts are sensitive to roster size and reporting completeness.
+- No public physical-load tracking data — workload is proxied, not measured.
+- Small n (11 seasons): findings are descriptive and directional, not significance-tested. Strength comes from consistency across the full window *and* a firm-source-only subset.
+- Pre-2020/21 coefficient values are secondary-sourced and flagged approximate; conclusions hold without them.
+- Club
